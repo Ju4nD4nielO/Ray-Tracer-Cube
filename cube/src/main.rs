@@ -4,10 +4,12 @@ mod cube;
 mod framebuffer;
 mod light;
 mod ray_intersect;
+mod texture;
 
 use minifb::{Key, Window, WindowOptions};
 use nalgebra_glm::{dot, normalize, Vec3};
 use std::f32::consts::PI;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::camera::Camera;
@@ -16,6 +18,7 @@ use crate::cube::Cube;
 use crate::framebuffer::Framebuffer;
 use crate::light::Light;
 use crate::ray_intersect::{Intersect, Material, RayIntersect};
+use crate::texture::Texture;
 
 const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
@@ -29,6 +32,7 @@ const SHADOW_BIAS: f32 = 1e-3;
 const REFLECTION_BIAS: f32 = 1e-3;
 
 const MAX_DEPTH: u32 = 3;
+const AMBIENT_INTENSITY: f32 = 0.40;
 
 pub fn reflect(incident: &Vec3, normal: &Vec3) -> Vec3 {
     incident - normal * (2.0 * dot(incident, normal))
@@ -65,9 +69,18 @@ pub fn shade(
         light.intensity
     };
 
+    let base_color = match &intersect.material.texture {
+        Some(texture) => texture.sample(intersect.uv.0, intersect.uv.1),
+        None => intersect.material.diffuse,
+    };
+
     let diffuse_intensity = dot(&intersect.normal, &light_direction).max(0.0);
-    let diffuse = intersect.material.diffuse
-        * (diffuse_intensity * intersect.material.albedo[0] * light_intensity);
+    let diffuse =
+        base_color * (diffuse_intensity * intersect.material.albedo[0] * light_intensity);
+
+    // Un poco de luz ambiental para que las caras que no reciben luz directa
+    // no queden completamente negras y se siga viendo la textura.
+    let ambient = base_color * AMBIENT_INTENSITY;
 
     let reflect_direction = reflect(&-light_direction, &intersect.normal);
     let specular_intensity = dot(&view_direction, &reflect_direction)
@@ -77,7 +90,7 @@ pub fn shade(
     let specular =
         light.color * (specular_intensity * intersect.material.albedo[1] * light_intensity);
 
-    diffuse + specular
+    diffuse + specular + ambient
 }
 
 pub fn cast_ray(
@@ -95,7 +108,7 @@ pub fn cast_ray(
 
     for object in objects {
         if let Some(intersect) = object.ray_intersect(ray_origin, ray_direction) {
-            if closest.is_none_or(|current| intersect.distance < current.distance) {
+            if closest.as_ref().is_none_or(|current| intersect.distance < current.distance) {
                 closest = Some(intersect);
             }
         }
@@ -165,14 +178,14 @@ fn main() {
 
     let mut window = Window::new("Lakitu", WIDTH, HEIGHT, WindowOptions::default()).unwrap();
 
-    // Solo luz difusa: specular (albedo[1]) y reflectividad (albedo[2]) en 0.
-    let diffuse_only = Material::new(Color::new(200, 60, 60), 1.0, [1.0, 0.0, 0.0]);
+    // Textura del cubo (coloca el archivo en assets/ dentro del proyecto).
+    let cube_texture = Arc::new(Texture::from_file("assets/cube_texture.png"));
 
-    let objects: Vec<Box<dyn RayIntersect>> = vec![Box::new(Cube::new(
-        Vec3::new(0.0, 0.0, 0.0),
-        2.0,
-        diffuse_only,
-    ))];
+    // Solo luz difusa: specular (albedo[1]) y reflectividad (albedo[2]) en 0.
+    let textured = Material::with_texture(1.0, [1.0, 0.0, 0.0], cube_texture);
+
+    let objects: Vec<Box<dyn RayIntersect>> =
+        vec![Box::new(Cube::new(Vec3::new(0.0, 0.0, 0.0), 2.0, textured))];
 
     let light = Light::new(Vec3::new(-4.0, 5.0, 6.0), Color::new(255, 255, 255), 1.5);
 

@@ -1,11 +1,14 @@
 use crate::color::Color;
+use crate::texture::Texture;
 use nalgebra_glm::Vec3;
+use std::sync::Arc;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct Material {
     pub diffuse: Color,
     pub specular: f32,
     pub albedo: [f32; 3],
+    pub texture: Option<Arc<Texture>>,
 }
 
 impl Material {
@@ -14,16 +17,27 @@ impl Material {
             diffuse,
             specular,
             albedo,
+            texture: None,
+        }
+    }
+
+    pub fn with_texture(specular: f32, albedo: [f32; 3], texture: Arc<Texture>) -> Self {
+        Material {
+            diffuse: Color::new(255, 255, 255),
+            specular,
+            albedo,
+            texture: Some(texture),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct Intersect {
     pub point: Vec3,
     pub normal: Vec3,
     pub distance: f32,
     pub material: Material,
+    pub uv: (f32, f32),
 }
 
 pub trait RayIntersect {

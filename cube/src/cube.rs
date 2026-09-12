@@ -84,11 +84,24 @@ impl RayIntersect for Cube {
 
         let point = ray_origin + ray_direction * distance;
 
+        // Coordenadas UV: se proyecta el punto sobre las dos coordenadas
+        // perpendiculares al eje de la normal, normalizadas a [0, 1] dentro
+        // de la cara golpeada.
+        let local = (point - min) / self.size;
+        let uv = if normal.x.abs() > 0.5 {
+            (local.z, local.y)
+        } else if normal.y.abs() > 0.5 {
+            (local.x, local.z)
+        } else {
+            (local.x, local.y)
+        };
+
         Some(Intersect {
             point,
             normal,
             distance,
-            material: self.material,
+            material: self.material.clone(),
+            uv,
         })
     }
 }
